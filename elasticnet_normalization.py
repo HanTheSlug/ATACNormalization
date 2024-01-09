@@ -53,9 +53,9 @@ def optimizeModelParameters(outlier_removed_raw_tn5_count_matrix, pc_dataframe, 
     - l1_ratio_values (list): List of l1_ratio hyperparameter values to try.
 
     Returns:
-    - float: Best average MSE obtained during hyperparameter tuning.
-    - float: Best alpha hyperparameter.
-    - float: Best l1_ratio hyperparameter.
+    - best_avg_mse (float): Best average MSE obtained during hyperparameter tuning.
+    - best_alpha (float): Best alpha hyperparameter.
+    - best_l1_ratio (float): Best l1_ratio hyperparameter.
     """
     # Split dataset into training and testing datasets. 80/20 split
     X_train, X_test, y_train, y_test = train_test_split(
@@ -69,8 +69,6 @@ def optimizeModelParameters(outlier_removed_raw_tn5_count_matrix, pc_dataframe, 
     best_avg_mse = float('inf')
     best_alpha = None
     best_l1_ratio = None
-
-    training_percentage_intervals = np.arange(0, num_peaks, num_peaks // 10)
 
     for alpha in alpha_values:
         for l1_ratio in l1_ratio_values:
@@ -113,7 +111,6 @@ def optimizeModelParameters(outlier_removed_raw_tn5_count_matrix, pc_dataframe, 
                     # Otherwise set that peak prediction to NaN. This is due to no samples existing for that peak. 
                     else:
                         predicted_values[peak] = np.nan
-                #predicted_values = pd.Series({peak: models[peak].predict(row.values.reshape(1, -1))[0] if models[peak] is not None and peak in actual_values else np.nan for peak in outlier_removed_raw_tn5_count_matrix.columns})
                 # Calculate MSE only for the peaks where valid predictions were made
                 valid_predictions = predicted_values.dropna()
                 valid_actual_values = actual_values[valid_predictions.index]
@@ -121,7 +118,7 @@ def optimizeModelParameters(outlier_removed_raw_tn5_count_matrix, pc_dataframe, 
                     mse = mean_squared_error(valid_actual_values, valid_predictions)
                     sample_mse.append((index, mse))
                 else:
-                    sample_mse.append((index, None))  # Indicate no prediction was made
+                    sample_mse.append((index, None))  # No predictions were made 
 
             # Filter out None values from sample_mse
             filtered_sample_mse = [mse for mse in sample_mse if mse is not None]
@@ -145,7 +142,7 @@ def optimizeModelParameters(outlier_removed_raw_tn5_count_matrix, pc_dataframe, 
 
     return best_avg_mse, best_alpha, best_l1_ratio
 
-def normalizeTN5Counts(raw_tn5_count_matrix, pc_matrix, best_alpha, best_l1_ratio):
+def normalizeTN5Counts(raw_tn5_count_matrix, pc_matrix, best_alpha, best_l1_ratio, num_pc):
     """
     Retrain ElasticNet models with the best hyperparameters and adjust TN5 count matrix entries.
 
@@ -154,6 +151,7 @@ def normalizeTN5Counts(raw_tn5_count_matrix, pc_matrix, best_alpha, best_l1_rati
     - pc_matrix (pd.DataFrame): DataFrame containing principal component matrix data.
     - best_alpha_values (list): Best alpha value.
     - best_l1_ratio_values (list): Best l1_ratio value.
+    - num_pc (int): Number of PCs associated with batch effects subtracted from elasticnet model.
 
     Returns:
     - adjusted_tn5_counts (pd.DataFrame): DataFrame containing normalized TN5 count data
@@ -176,11 +174,11 @@ def normalizeTN5Counts(raw_tn5_count_matrix, pc_matrix, best_alpha, best_l1_rati
     for peak, model in best_models.items():
         if model is not None:
             # Extract coefficients for the first five principal components
-            coeffs = model.coef_[:5]
+            coeffs = model.coef_[:num_pc]
 
             # Multiply and subtract from the TN5 count for each sample
             for index in adjusted_tn5_counts.index:
-                pc_values = pc_matrix.loc[index, pc_matrix.columns[:5]]
+                pc_values = pc_matrix.loc[index, pc_matrix.columns[:num_pc]]
                 adjustment = np.dot(coeffs, pc_values)
                 # Ensure the peak exists in the TN5 count matrix
                 if peak in adjusted_tn5_counts.columns:
@@ -207,7 +205,9 @@ def main():
     parser.add_argument("--pc", type=str, required=True,
                         help="Path to a CSV containing the PCs of all samples. Format should be PCs as columns and samples as rows")
     parser.add_argument("--out", type=str, required=True,
-                        help="Path to outfile containing the normalized tn5 counts.")
+                        help="Path to outfile containing the normalized tn5 counts")
+    parser.add_argument("--num_pc", type=int, required=True,
+                        help="Number of PCs associated with batch effects subtracted from elasticnet model")
 
     # Parse command line arguments
     args = parser.parse_args()
@@ -226,25 +226,25 @@ def main():
 
     start_time = time.time()
 
-    # Call the remove_outliers_and_merge function to preprocess your data
+    # Call the removeOutliers function to preprocess your data
     outlier_removed_raw_tn5_count_matrix = removeOutliers(raw_tn5_count_matrix, pc_matrix)
 
     removeOutliers_end_time = time.time()
     elapsed_time = removeOutliers_end_time - start_time
     print(f"The removeOutliers function took {elapsed_time} seconds to run.")
+    
     # Define the alpha and l1 ratios you want to test
-
-    alpha_values = [0.1]
-    l1_ratio_values = [1]
-
-    # Call the hyperparameter_tuning function to find the best hyperparameters
+    alpha_values = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 10]
+    l1_ratio_values = [0.05, 0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 1.0]
+    
+    # Call the optimizeModelParameters function to find the best hyperparameters
     best_avg_mse, best_alpha, best_l1_ratio = optimizeModelParameters(outlier_removed_raw_tn5_count_matrix, pc_matrix, alpha_values, l1_ratio_values)
     optimizeModelParameters_end_time = time.time()
     elapsed_time = optimizeModelParameters_end_time - removeOutliers_end_time
     print(f"The optimizeModelParameters function took {elapsed_time} seconds to run.")
 
-    # Call the retrain_models_and_adjust_counts function to retrain models and adjust counts
-    adjusted_tn5_counts = normalizeTN5Counts(raw_tn5_count_matrix, pc_matrix, best_alpha, best_l1_ratio)
+    # Call the normalizeTN5Counts function to retrain models and adjust counts
+    adjusted_tn5_counts = normalizeTN5Counts(raw_tn5_count_matrix, pc_matrix, best_alpha, best_l1_ratio,args.num_pc)
     normalizeTN5Counts_end_time = time.time()
     elapsed_time = normalizeTN5Counts_end_time - optimizeModelParameters_end_time
     print(f"The normalizeTN5Counts function took {elapsed_time} seconds to run.")
