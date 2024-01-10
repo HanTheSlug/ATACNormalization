@@ -161,7 +161,7 @@ def normalizeTN5Counts(raw_tn5_count_matrix, pc_matrix, best_alpha, best_l1_rati
     for peak in raw_tn5_count_matrix.columns:
         non_nan_indices = raw_tn5_count_matrix[peak].dropna().index
         if len(non_nan_indices) > 0:
-            X_subset = pc_matrix.loc[non_nan_indices, pc_matrix.columns[:5]]
+            X_subset = pc_matrix.loc[non_nan_indices, pc_matrix.columns[:num_pc]]
             y_subset = raw_tn5_count_matrix.loc[non_nan_indices, peak]
             model = ElasticNet(alpha=best_alpha, l1_ratio=best_l1_ratio)
             model.fit(X_subset, y_subset)
