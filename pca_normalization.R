@@ -47,7 +47,7 @@ createElbowPlot <- function(pca_result, filepath) {
 
 
 tmm_tn5_counts_df <- data.frame(fread(opt$infile), header = TRUE, row.names = 1, stringsAsFactors = FALSE)
-tmm_tn5_counts_df <- tmm_tn5_counts_df[,0:(ncol(tmm_tn5_counts_df)-1)]
+tmm_tn5_counts_df <- t(tmm_tn5_counts_df)
 tmm_tn5_counts_df <- apply(tmm_tn5_counts_df, 2, function(x) as.numeric(as.character(x)))
 peak_names <- rownames(tmm_tn5_counts_df)
 tmm_tn5_counts_df <- t(tmm_tn5_counts_df)
