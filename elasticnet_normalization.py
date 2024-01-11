@@ -7,7 +7,6 @@ from sklearn.linear_model import ElasticNet
 from sklearn.metrics import mean_squared_error
 import warnings
 import time
-warnings.filterwarnings("ignore")
 
 def removeOutliers(raw_tn5_count_matrix, pc_matrix):
     """
@@ -20,23 +19,28 @@ def removeOutliers(raw_tn5_count_matrix, pc_matrix):
     Returns:
     - outlier_removed_raw_tn5_count_matrix (pd.DataFrame): A DataFrame with outliers removed.
     """
-    
+
     # Drop "header" row if present
     if "header" in raw_tn5_count_matrix.index:
         raw_tn5_count_matrix = raw_tn5_count_matrix.drop("header")
     # Initialize a DataFrame to store results
     outlier_removed_raw_tn5_count_matrix = pd.DataFrame(index=raw_tn5_count_matrix.index)
-
+    
+    # List to store filtered counts for each peak
+    filtered_counts = []
     # Iterate over each column (peak) and remove the top and bottom 10% of samples
+
     for peak in raw_tn5_count_matrix.columns:
         values = raw_tn5_count_matrix[peak]
         lower_bound = values.quantile(0.10)
         upper_bound = values.quantile(0.90)
         filtered_values = values[(values >= lower_bound) & (values <= upper_bound)]
 
-        # Insert the filtered values into the new DataFrame
-        outlier_removed_raw_tn5_count_matrix[peak] = filtered_values
+        # Append the filtered Series to the list
+        filtered_counts.append(filtered_values.rename(peak))
 
+    # Concatenate all the filtered counts into a new DataFrame
+    outlier_removed_raw_tn5_count_matrix = pd.concat(filtered_counts, axis=1)
     # Merge with pc_matrix using an inner join
     outlier_removed_raw_tn5_count_matrix = outlier_removed_raw_tn5_count_matrix.join(pc_matrix, how='inner')
 
@@ -66,9 +70,9 @@ def optimizeModelParameters(outlier_removed_raw_tn5_count_matrix, pc_dataframe, 
     )
 
     # Initialize best metrics
-    best_avg_mse = float('inf')
-    best_alpha = None
-    best_l1_ratio = None
+    best_avg_mse = 0 #float('inf')
+    best_alpha = 0 #None
+    best_l1_ratio = 0 #None
 
     for alpha in alpha_values:
         for l1_ratio in l1_ratio_values:
@@ -220,13 +224,13 @@ def main():
 
     # Load the PC Dataframe
     try:
-        pc_matrix = pd.read_csv(args.pc, delimiter=',', index_col=0)
+        pc_matrix = pd.read_csv(args.pc, delimiter=',',index_col=0)
     except FileNotFoundError:
         print(f"Error: The file '{args.pc}' was not found or not in CSV format.")
 
     start_time = time.time()
 
-    # Call the removeOutliers function to preprocess your data
+    # Call the removeOutliers function to preprocess your data 
     outlier_removed_raw_tn5_count_matrix = removeOutliers(raw_tn5_count_matrix, pc_matrix)
 
     removeOutliers_end_time = time.time()
@@ -234,9 +238,9 @@ def main():
     print(f"The removeOutliers function took {elapsed_time} seconds to run.")
     
     # Define the alpha and l1 ratios you want to test
-    alpha_values = [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 10]
-    l1_ratio_values = [0.05, 0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 1.0]
-    
+    alpha_values = [0.001, 0.05, 0.1, 0.5, 1, 10]
+    l1_ratio_values = [0.05, 0.1, 0.25, 0.5, 0.75, 1.0]
+
     # Call the optimizeModelParameters function to find the best hyperparameters
     best_avg_mse, best_alpha, best_l1_ratio = optimizeModelParameters(outlier_removed_raw_tn5_count_matrix, pc_matrix, alpha_values, l1_ratio_values)
     optimizeModelParameters_end_time = time.time()
